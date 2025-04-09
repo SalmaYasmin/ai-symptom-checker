@@ -65,28 +65,45 @@ function App() {
     const checkApi = async () => {
       try {
         console.log('Checking API health...');
-        const response = await fetch('https://ai-symptom-checker-3sr4.onrender.com/api/health', {
-          method: 'GET',
+        // Try the main API endpoint directly
+        const response = await fetch('https://ai-symptom-checker-3sr4.onrender.com/api/symptoms/analyze', {
+          method: 'POST',
           headers: {
+            'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
+          body: JSON.stringify({
+            symptoms: ['test'],
+          }),
         });
+        
         console.log('API health response:', response.status);
         
         if (response.ok) {
-          const data = await response.json();
-          console.log('API health data:', data);
           setApiStatus('available');
+          setApiErrorDetails('');
         } else {
-          const errorData = await response.json().catch(() => ({}));
-          console.error('API health check failed:', response.status, errorData);
-          setApiStatus('unavailable');
-          setApiErrorDetails(`Status: ${response.status} - ${errorData.message || 'Service unavailable'}`);
+          // If we get a 400 or 422, it means the API is working but our test request was invalid
+          if (response.status === 400 || response.status === 422) {
+            setApiStatus('available');
+            setApiErrorDetails('');
+          } else {
+            const errorData = await response.json().catch(() => ({}));
+            console.error('API health check failed:', response.status, errorData);
+            setApiStatus('unavailable');
+            setApiErrorDetails(`Status: ${response.status} - ${errorData.message || 'Service unavailable'}`);
+          }
         }
       } catch (err) {
         console.error('API health check error:', err);
-        setApiStatus('unavailable');
-        setApiErrorDetails(err.message || 'Failed to connect to the service');
+        // Check if it's a CORS error
+        if (err.message.includes('CORS')) {
+          setApiStatus('unavailable');
+          setApiErrorDetails('CORS Error: The API is not configured to accept requests from this domain');
+        } else {
+          setApiStatus('unavailable');
+          setApiErrorDetails(err.message || 'Failed to connect to the service');
+        }
       } finally {
         setIsInitialized(true);
       }
