@@ -65,7 +65,6 @@ function App() {
     const checkApi = async () => {
       try {
         console.log('Checking API health...');
-        // Try the main API endpoint directly
         const response = await fetch('https://ai-symptom-checker-3sr4.onrender.com/api/symptoms/analyze', {
           method: 'POST',
           headers: {
