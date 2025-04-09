@@ -65,15 +65,11 @@ function App() {
     const checkApi = async () => {
       try {
         console.log('Checking API health...');
-        const response = await fetch('https://ai-symptom-checker-3sr4.onrender.com/api/symptoms/analyze', {
-          method: 'POST',
+        const response = await fetch('https://ai-symptom-checker-3sr4.onrender.com/api/health', {
+          method: 'GET',
           headers: {
-            'Content-Type': 'application/json',
             'Accept': 'application/json',
           },
-          body: JSON.stringify({
-            symptoms: ['test'],
-          }),
         });
         
         console.log('API health response:', response.status);
@@ -82,16 +78,10 @@ function App() {
           setApiStatus('available');
           setApiErrorDetails('');
         } else {
-          // If we get a 400 or 422, it means the API is working but our test request was invalid
-          if (response.status === 400 || response.status === 422) {
-            setApiStatus('available');
-            setApiErrorDetails('');
-          } else {
-            const errorData = await response.json().catch(() => ({}));
-            console.error('API health check failed:', response.status, errorData);
-            setApiStatus('unavailable');
-            setApiErrorDetails(`Status: ${response.status} - ${errorData.message || 'Service unavailable'}`);
-          }
+          const errorData = await response.json().catch(() => ({}));
+          console.error('API health check failed:', response.status, errorData);
+          setApiStatus('unavailable');
+          setApiErrorDetails(`Status: ${response.status} - ${errorData.message || 'Service unavailable'}`);
         }
       } catch (err) {
         console.error('API health check error:', err);
