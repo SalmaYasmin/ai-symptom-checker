@@ -8,9 +8,14 @@ import {
   List,
   ListItem,
   ListItemText,
+  ListItemSecondaryAction,
+  IconButton,
   Paper,
   CircularProgress,
+  Chip,
 } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
+import AddIcon from '@mui/icons-material/Add';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -50,7 +55,8 @@ class ErrorBoundary extends React.Component {
 function App() {
   console.log('App component rendering');
   
-  const [symptoms, setSymptoms] = useState('');
+  const [currentSymptom, setCurrentSymptom] = useState('');
+  const [symptomsList, setSymptomsList] = useState([]);
   const [diagnosis, setDiagnosis] = useState('');
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -100,13 +106,30 @@ function App() {
     checkApi();
   }, []);
 
+  const handleAddSymptom = (e) => {
+    e.preventDefault();
+    if (currentSymptom.trim()) {
+      setSymptomsList([...symptomsList, currentSymptom.trim()]);
+      setCurrentSymptom('');
+    }
+  };
+
+  const handleDeleteSymptom = (indexToDelete) => {
+    setSymptomsList(symptomsList.filter((_, index) => index !== indexToDelete));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (symptomsList.length === 0) {
+      setError('Please add at least one symptom');
+      return;
+    }
+    
     setLoading(true);
     setError('');
     
     try {
-      console.log('Attempting to analyze symptoms:', symptoms);
+      console.log('Attempting to analyze symptoms:', symptomsList);
       const response = await fetch('https://ai-symptom-checker-3sr4.onrender.com/api/symptoms/analyze', {
         method: 'POST',
         headers: {
@@ -114,7 +137,7 @@ function App() {
           'Accept': 'application/json',
         },
         body: JSON.stringify({
-          symptoms: symptoms.split(',').map(s => s.trim()),
+          symptoms: symptomsList,
         }),
       });
 
@@ -174,29 +197,63 @@ function App() {
           )}
           
           <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-            <form onSubmit={handleSubmit}>
-              <TextField
-                fullWidth
-                label="Enter your symptoms (separated by commas)"
-                value={symptoms}
-                onChange={(e) => setSymptoms(e.target.value)}
-                multiline
-                rows={3}
-                margin="normal"
-                variant="outlined"
-                disabled={loading}
-              />
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                fullWidth
-                disabled={loading || !symptoms.trim() || apiStatus === 'unavailable'}
-                sx={{ mt: 2 }}
-              >
-                {loading ? <CircularProgress size={24} color="inherit" /> : 'Analyze Symptoms'}
-              </Button>
+            <form onSubmit={handleAddSymptom}>
+              <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+                <TextField
+                  fullWidth
+                  label="Enter a symptom"
+                  value={currentSymptom}
+                  onChange={(e) => setCurrentSymptom(e.target.value)}
+                  variant="outlined"
+                  disabled={loading}
+                />
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="secondary"
+                  disabled={!currentSymptom.trim() || loading}
+                  sx={{ minWidth: '120px' }}
+                >
+                  <AddIcon /> Add
+                </Button>
+              </Box>
             </form>
+
+            {symptomsList.length > 0 && (
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="h6" gutterBottom>
+                  Your Symptoms:
+                </Typography>
+                <List>
+                  {symptomsList.map((symptom, index) => (
+                    <ListItem key={index}>
+                      <ListItemText primary={symptom} />
+                      <ListItemSecondaryAction>
+                        <IconButton
+                          edge="end"
+                          aria-label="delete"
+                          onClick={() => handleDeleteSymptom(index)}
+                          disabled={loading}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </ListItemSecondaryAction>
+                    </ListItem>
+                  ))}
+                </List>
+              </Box>
+            )}
+
+            <Button
+              onClick={handleSubmit}
+              variant="contained"
+              color="primary"
+              fullWidth
+              disabled={loading || symptomsList.length === 0 || apiStatus === 'unavailable'}
+              sx={{ mt: 2 }}
+            >
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Analyze Symptoms'}
+            </Button>
           </Paper>
 
           {error && (
