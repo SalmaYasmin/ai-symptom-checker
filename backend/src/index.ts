@@ -14,6 +14,7 @@ app.use(cors({
   origin: [
     'http://localhost:3000',
     'https://ai-symptom-checker-frontend-2hghfc4u8-salmas-projects-a16c76e3.vercel.app',
+    'https://splendid-llama-b8b1f9.netlify.app/',
     'https://ai-symptom-checker-3sr4.onrender.com'
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
