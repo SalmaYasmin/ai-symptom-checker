@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Typography,
@@ -18,6 +18,26 @@ function App() {
   const [recommendations, setRecommendations] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [apiStatus, setApiStatus] = useState('checking');
+
+  useEffect(() => {
+    // Check API availability on component mount
+    const checkApi = async () => {
+      try {
+        const response = await fetch('https://ai-symptom-checker-3sr4.onrender.com/api/health');
+        if (response.ok) {
+          setApiStatus('available');
+        } else {
+          setApiStatus('unavailable');
+          console.error('API health check failed:', response.status);
+        }
+      } catch (err) {
+        setApiStatus('unavailable');
+        console.error('API health check error:', err);
+      }
+    };
+    checkApi();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -25,6 +45,7 @@ function App() {
     setError('');
     
     try {
+      console.log('Attempting to analyze symptoms:', symptoms);
       const response = await fetch('https://ai-symptom-checker-3sr4.onrender.com/api/symptoms/analyze', {
         method: 'POST',
         headers: {
@@ -35,14 +56,20 @@ function App() {
         }),
       });
 
+      console.log('API Response status:', response.status);
+      
       if (!response.ok) {
-        throw new Error('Failed to analyze symptoms');
+        const errorData = await response.json().catch(() => ({}));
+        console.error('API Error:', errorData);
+        throw new Error(errorData.message || 'Failed to analyze symptoms');
       }
 
       const data = await response.json();
+      console.log('API Response data:', data);
       setDiagnosis(data.diagnosis);
       setRecommendations(data.recommendations);
     } catch (err) {
+      console.error('Error in handleSubmit:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
     } finally {
       setLoading(false);
@@ -55,6 +82,12 @@ function App() {
         <Typography variant="h3" component="h1" gutterBottom align="center">
           AI Symptom Checker
         </Typography>
+        
+        {apiStatus === 'unavailable' && (
+          <Typography color="error" sx={{ mb: 2, textAlign: 'center' }}>
+            Warning: The symptom analysis service is currently unavailable. Please try again later.
+          </Typography>
+        )}
         
         <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
           <form onSubmit={handleSubmit}>
