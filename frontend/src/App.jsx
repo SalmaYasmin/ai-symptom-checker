@@ -56,7 +56,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [apiStatus, setApiStatus] = useState('checking');
-  const [renderError, setRenderError] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);
 
   useEffect(() => {
     console.log('App component mounted');
@@ -64,7 +64,12 @@ function App() {
     const checkApi = async () => {
       try {
         console.log('Checking API health...');
-        const response = await fetch('https://ai-symptom-checker-3sr4.onrender.com/api/health');
+        const response = await fetch('https://ai-symptom-checker-3sr4.onrender.com/api/health', {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json',
+          },
+        });
         console.log('API health response:', response.status);
         if (response.ok) {
           setApiStatus('available');
@@ -75,6 +80,8 @@ function App() {
       } catch (err) {
         console.error('API health check error:', err);
         setApiStatus('unavailable');
+      } finally {
+        setIsInitialized(true);
       }
     };
     checkApi();
@@ -91,6 +98,7 @@ function App() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Accept': 'application/json',
         },
         body: JSON.stringify({
           symptoms: symptoms.split(',').map(s => s.trim()),
@@ -117,6 +125,19 @@ function App() {
     }
   };
 
+  if (!isInitialized) {
+    return (
+      <Container maxWidth="md">
+        <Box sx={{ my: 4, textAlign: 'center' }}>
+          <CircularProgress />
+          <Typography variant="h6" sx={{ mt: 2 }}>
+            Loading...
+          </Typography>
+        </Box>
+      </Container>
+    );
+  }
+
   return (
     <ErrorBoundary>
       <Container maxWidth="md">
@@ -126,9 +147,14 @@ function App() {
           </Typography>
           
           {apiStatus === 'unavailable' && (
-            <Typography color="error" sx={{ mb: 2, textAlign: 'center' }}>
-              Warning: The symptom analysis service is currently unavailable. Please try again later.
-            </Typography>
+            <Paper elevation={3} sx={{ p: 3, mb: 3, bgcolor: '#fff3e0' }}>
+              <Typography color="error" sx={{ mb: 2, textAlign: 'center' }}>
+                Warning: The symptom analysis service is currently unavailable.
+              </Typography>
+              <Typography variant="body2" align="center">
+                You can still enter symptoms, but analysis will not be available until the service is restored.
+              </Typography>
+            </Paper>
           )}
           
           <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
@@ -142,13 +168,14 @@ function App() {
                 rows={3}
                 margin="normal"
                 variant="outlined"
+                disabled={loading}
               />
               <Button
                 type="submit"
                 variant="contained"
                 color="primary"
                 fullWidth
-                disabled={loading || !symptoms.trim()}
+                disabled={loading || !symptoms.trim() || apiStatus === 'unavailable'}
                 sx={{ mt: 2 }}
               >
                 {loading ? <CircularProgress size={24} color="inherit" /> : 'Analyze Symptoms'}
@@ -157,9 +184,11 @@ function App() {
           </Paper>
 
           {error && (
-            <Typography color="error" sx={{ mt: 2 }}>
-              {error}
-            </Typography>
+            <Paper elevation={3} sx={{ p: 3, mb: 3, bgcolor: '#ffebee' }}>
+              <Typography color="error">
+                {error}
+              </Typography>
+            </Paper>
           )}
 
           {diagnosis && (
