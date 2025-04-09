@@ -26,6 +26,15 @@ app.use(express.json());
 // Connect to MongoDB
 connectDB();
 
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    status: 'healthy',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 // Routes
 app.use('/api/symptoms', symptomRoutes);
 
