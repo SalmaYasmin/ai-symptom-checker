@@ -57,6 +57,7 @@ function App() {
   const [error, setError] = useState('');
   const [apiStatus, setApiStatus] = useState('checking');
   const [isInitialized, setIsInitialized] = useState(false);
+  const [apiErrorDetails, setApiErrorDetails] = useState('');
 
   useEffect(() => {
     console.log('App component mounted');
@@ -71,15 +72,21 @@ function App() {
           },
         });
         console.log('API health response:', response.status);
+        
         if (response.ok) {
+          const data = await response.json();
+          console.log('API health data:', data);
           setApiStatus('available');
         } else {
+          const errorData = await response.json().catch(() => ({}));
+          console.error('API health check failed:', response.status, errorData);
           setApiStatus('unavailable');
-          console.error('API health check failed:', response.status);
+          setApiErrorDetails(`Status: ${response.status} - ${errorData.message || 'Service unavailable'}`);
         }
       } catch (err) {
         console.error('API health check error:', err);
         setApiStatus('unavailable');
+        setApiErrorDetails(err.message || 'Failed to connect to the service');
       } finally {
         setIsInitialized(true);
       }
@@ -151,8 +158,11 @@ function App() {
               <Typography color="error" sx={{ mb: 2, textAlign: 'center' }}>
                 Warning: The symptom analysis service is currently unavailable.
               </Typography>
+              <Typography variant="body2" align="center" sx={{ mb: 1 }}>
+                {apiErrorDetails}
+              </Typography>
               <Typography variant="body2" align="center">
-                You can still enter symptoms, but analysis will not be available until the service is restored.
+                Please check back later or contact support if the issue persists.
               </Typography>
             </Paper>
           )}
