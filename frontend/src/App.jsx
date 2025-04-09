@@ -12,10 +12,14 @@ import {
   IconButton,
   Paper,
   CircularProgress,
-  Chip,
+  Tabs,
+  Tab,
+  AppBar,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
+import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
+import PersonIcon from '@mui/icons-material/Person';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -52,9 +56,29 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// TabPanel component to handle tab content
+function TabPanel({ children, value, index, ...other }) {
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`simple-tabpanel-${index}`}
+      aria-labelledby={`simple-tab-${index}`}
+      {...other}
+    >
+      {value === index && (
+        <Box sx={{ p: 3 }}>
+          {children}
+        </Box>
+      )}
+    </div>
+  );
+}
+
 function App() {
   console.log('App component rendering');
   
+  const [currentTab, setCurrentTab] = useState(0);
   const [currentSymptom, setCurrentSymptom] = useState('');
   const [symptomsList, setSymptomsList] = useState([]);
   const [diagnosis, setDiagnosis] = useState('');
@@ -105,6 +129,16 @@ function App() {
     };
     checkApi();
   }, []);
+
+  const handleTabChange = (event, newValue) => {
+    setCurrentTab(newValue);
+    // Reset states when switching tabs
+    setDiagnosis('');
+    setRecommendations([]);
+    setError('');
+    setSymptomsList([]);
+    setCurrentSymptom('');
+  };
 
   const handleAddSymptom = (e) => {
     e.preventDefault();
@@ -174,14 +208,166 @@ function App() {
     );
   }
 
+  const renderPatientView = () => (
+    <>
+      <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Describe Your Symptoms
+        </Typography>
+        <form onSubmit={handleAddSymptom}>
+          <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
+            <TextField
+              fullWidth
+              label="Enter a symptom"
+              value={currentSymptom}
+              onChange={(e) => setCurrentSymptom(e.target.value)}
+              variant="outlined"
+              disabled={loading}
+            />
+            <Button
+              type="submit"
+              variant="contained"
+              color="secondary"
+              disabled={!currentSymptom.trim() || loading}
+              sx={{ minWidth: '120px' }}
+            >
+              <AddIcon /> Add
+            </Button>
+          </Box>
+        </form>
+
+        {symptomsList.length > 0 && (
+          <Box sx={{ mb: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              Your Symptoms:
+            </Typography>
+            <List>
+              {symptomsList.map((symptom, index) => (
+                <ListItem key={index}>
+                  <ListItemText primary={symptom} />
+                  <ListItemSecondaryAction>
+                    <IconButton
+                      edge="end"
+                      aria-label="delete"
+                      onClick={() => handleDeleteSymptom(index)}
+                      disabled={loading}
+                    >
+                      <DeleteIcon />
+                    </IconButton>
+                  </ListItemSecondaryAction>
+                </ListItem>
+              ))}
+            </List>
+          </Box>
+        )}
+
+        <Button
+          onClick={handleSubmit}
+          variant="contained"
+          color="primary"
+          fullWidth
+          disabled={loading || symptomsList.length === 0 || apiStatus === 'unavailable'}
+          sx={{ mt: 2 }}
+        >
+          {loading ? <CircularProgress size={24} color="inherit" /> : 'Get Analysis'}
+        </Button>
+      </Paper>
+
+      {error && (
+        <Paper elevation={3} sx={{ p: 3, mb: 3, bgcolor: '#ffebee' }}>
+          <Typography color="error">
+            {error}
+          </Typography>
+        </Paper>
+      )}
+
+      {diagnosis && (
+        <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h5" gutterBottom>
+            Preliminary Assessment
+          </Typography>
+          <Typography paragraph>{diagnosis}</Typography>
+        </Paper>
+      )}
+
+      {recommendations.length > 0 && (
+        <Paper elevation={3} sx={{ p: 3 }}>
+          <Typography variant="h5" gutterBottom>
+            Recommendations
+          </Typography>
+          <List>
+            {recommendations.map((recommendation, index) => (
+              <ListItem key={index}>
+                <ListItemText primary={recommendation} />
+              </ListItem>
+            ))}
+          </List>
+        </Paper>
+      )}
+    </>
+  );
+
+  const renderDoctorView = () => (
+    <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+      <Typography variant="h6" gutterBottom>
+        Doctor's Dashboard
+      </Typography>
+      <Typography paragraph>
+        Welcome to the Doctor's Portal. Here you can:
+      </Typography>
+      <List>
+        <ListItem>
+          <ListItemText 
+            primary="Review Patient Cases" 
+            secondary="Access and review patient symptom submissions and AI analyses"
+          />
+        </ListItem>
+        <ListItem>
+          <ListItemText 
+            primary="Provide Expert Feedback" 
+            secondary="Add your professional insights to AI-generated diagnoses"
+          />
+        </ListItem>
+        <ListItem>
+          <ListItemText 
+            primary="Manage Patient Records" 
+            secondary="Track patient history and treatment plans"
+          />
+        </ListItem>
+      </List>
+      <Box sx={{ mt: 3, textAlign: 'center' }}>
+        <Typography color="textSecondary">
+          Doctor's portal features coming soon...
+        </Typography>
+      </Box>
+    </Paper>
+  );
+
   return (
     <ErrorBoundary>
       <Container maxWidth="md">
-        <Box sx={{ my: 4 }}>
-          <Typography variant="h3" component="h1" gutterBottom align="center">
-            AI Symptom Checker
-          </Typography>
-          
+        <Box sx={{ width: '100%' }}>
+          <AppBar position="static" color="default" sx={{ mb: 3 }}>
+            <Tabs
+              value={currentTab}
+              onChange={handleTabChange}
+              indicatorColor="primary"
+              textColor="primary"
+              variant="fullWidth"
+            >
+              <Tab 
+                icon={<PersonIcon />} 
+                label="For Patients" 
+                iconPosition="start"
+              />
+              <Tab 
+                icon={<LocalHospitalIcon />} 
+                label="For Doctors" 
+                iconPosition="start"
+              />
+            </Tabs>
+          </AppBar>
+
           {apiStatus === 'unavailable' && (
             <Paper elevation={3} sx={{ p: 3, mb: 3, bgcolor: '#fff3e0' }}>
               <Typography color="error" sx={{ mb: 2, textAlign: 'center' }}>
@@ -195,98 +381,14 @@ function App() {
               </Typography>
             </Paper>
           )}
-          
-          <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-            <form onSubmit={handleAddSymptom}>
-              <Box sx={{ display: 'flex', gap: 1, mb: 2 }}>
-                <TextField
-                  fullWidth
-                  label="Enter a symptom"
-                  value={currentSymptom}
-                  onChange={(e) => setCurrentSymptom(e.target.value)}
-                  variant="outlined"
-                  disabled={loading}
-                />
-                <Button
-                  type="submit"
-                  variant="contained"
-                  color="secondary"
-                  disabled={!currentSymptom.trim() || loading}
-                  sx={{ minWidth: '120px' }}
-                >
-                  <AddIcon /> Add
-                </Button>
-              </Box>
-            </form>
 
-            {symptomsList.length > 0 && (
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="h6" gutterBottom>
-                  Your Symptoms:
-                </Typography>
-                <List>
-                  {symptomsList.map((symptom, index) => (
-                    <ListItem key={index}>
-                      <ListItemText primary={symptom} />
-                      <ListItemSecondaryAction>
-                        <IconButton
-                          edge="end"
-                          aria-label="delete"
-                          onClick={() => handleDeleteSymptom(index)}
-                          disabled={loading}
-                        >
-                          <DeleteIcon />
-                        </IconButton>
-                      </ListItemSecondaryAction>
-                    </ListItem>
-                  ))}
-                </List>
-              </Box>
-            )}
+          <TabPanel value={currentTab} index={0}>
+            {renderPatientView()}
+          </TabPanel>
 
-            <Button
-              onClick={handleSubmit}
-              variant="contained"
-              color="primary"
-              fullWidth
-              disabled={loading || symptomsList.length === 0 || apiStatus === 'unavailable'}
-              sx={{ mt: 2 }}
-            >
-              {loading ? <CircularProgress size={24} color="inherit" /> : 'Analyze Symptoms'}
-            </Button>
-          </Paper>
-
-          {error && (
-            <Paper elevation={3} sx={{ p: 3, mb: 3, bgcolor: '#ffebee' }}>
-              <Typography color="error">
-                {error}
-              </Typography>
-            </Paper>
-          )}
-
-          {diagnosis && (
-            <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
-              <Typography variant="h5" gutterBottom>
-                Diagnosis
-              </Typography>
-              <Typography paragraph>{diagnosis}</Typography>
-            </Paper>
-          )}
-
-          {recommendations.length > 0 && (
-            <Paper elevation={3} sx={{ p: 3 }}>
-              <Typography variant="h5" gutterBottom>
-                Recommendations
-              </Typography>
-              <List>
-                {recommendations.map((recommendation, index) => (
-                  <ListItem key={index}>
-                    <ListItemText primary={recommendation} />
-                  </ListItem>
-                ))}
-              </List>
-            </Paper>
-          )}
+          <TabPanel value={currentTab} index={1}>
+            {renderDoctorView()}
+          </TabPanel>
         </Box>
       </Container>
     </ErrorBoundary>
