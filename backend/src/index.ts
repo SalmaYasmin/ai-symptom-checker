@@ -11,9 +11,14 @@ const PORT = process.env.PORT || 5001;
 
 // Configure CORS
 app.use(cors({
-  origin: '*', // Allow all origins in development
+  origin: [
+    'http://localhost:3000',
+    'https://ai-symptom-checker-frontend-2hghfc4u8-salmas-projects-a16c76e3.vercel.app',
+    'https://ai-symptom-checker-3sr4.onrender.com'
+  ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
 }));
 
 app.use(express.json());
