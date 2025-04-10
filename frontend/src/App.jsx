@@ -34,6 +34,7 @@ import {
   Card,
   CardContent,
   Chip,
+  ListItemIcon,
 } from '@mui/material';
 import DeleteIcon from '@mui/icons-material/Delete';
 import AddIcon from '@mui/icons-material/Add';
@@ -46,6 +47,12 @@ import MedicalInformationIcon from '@mui/icons-material/MedicalInformation';
 import ScienceIcon from '@mui/icons-material/Science';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import RecommendIcon from '@mui/icons-material/Recommend';
+import VideocamIcon from '@mui/icons-material/Videocam';
+import CalendarTodayIcon from '@mui/icons-material/CalendarToday';
+import PaymentIcon from '@mui/icons-material/Payment';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import EventAvailableIcon from '@mui/icons-material/EventAvailable';
+import ScheduleIcon from '@mui/icons-material/Schedule';
 import config from './config';
 
 // Error Boundary Component
@@ -123,6 +130,12 @@ function App() {
   const [isPatientDialogOpen, setIsPatientDialogOpen] = useState(false);
   const [technicalDiagnosis, setTechnicalDiagnosis] = useState('');
   const [medicalReferences, setMedicalReferences] = useState([]);
+  const [showTelemedDialog, setShowTelemedDialog] = useState(false);
+  const [selectedDoctor, setSelectedDoctor] = useState(null);
+  const [checkupReminders, setCheckupReminders] = useState([
+    { id: 1, patientId: 1, type: 'Annual Check-up', dueDate: '2024-04-15' },
+    { id: 2, patientId: 2, type: 'Follow-up', dueDate: '2024-03-25' }
+  ]);
 
   useEffect(() => {
     console.log('App component mounted');
@@ -283,6 +296,26 @@ function App() {
     }
   };
 
+  const handleSendPaymentReminder = (patient) => {
+    // Here you would integrate with your backend to send payment reminders
+    console.log(`Sending payment reminder to ${patient.name}`);
+    // Show success message
+    alert(`Payment reminder sent to ${patient.name}`);
+  };
+
+  const handleSendCheckupReminder = (patient) => {
+    // Here you would integrate with your backend to send check-up reminders
+    console.log(`Sending check-up reminder to ${patient.name}`);
+    // Show success message
+    alert(`Check-up reminder sent to ${patient.name}`);
+  };
+
+  const handleScheduleNewCheckup = () => {
+    // Implement scheduling logic
+    console.log('Opening check-up scheduling dialog');
+    // You could open a dialog here to schedule new check-ups
+  };
+
   if (!isInitialized) {
     return (
       <Container maxWidth="md">
@@ -295,6 +328,45 @@ function App() {
       </Container>
     );
   }
+
+  const TelemedDialog = ({ open, onClose, doctor }) => (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle sx={{ backgroundColor: 'primary.main', color: 'white' }}>
+        <VideocamIcon sx={{ mr: 1 }} />
+        Schedule Telemedicine Appointment
+      </DialogTitle>
+      <DialogContent sx={{ pt: 3 }}>
+        <Grid container spacing={2}>
+          <Grid item xs={12}>
+            <Typography variant="subtitle1" gutterBottom>
+              Available Doctors
+            </Typography>
+            <List>
+              {['Dr. Sarah Smith - General Physician', 'Dr. John Doe - Specialist', 'Dr. Emily Johnson - Pediatrician'].map((doc, index) => (
+                <ListItem key={index}>
+                  <ListItemText 
+                    primary={doc}
+                    secondary="Next available: Today, 3:00 PM"
+                  />
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    startIcon={<CalendarTodayIcon />}
+                    size="small"
+                  >
+                    Book
+                  </Button>
+                </ListItem>
+              ))}
+            </List>
+          </Grid>
+        </Grid>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
 
   const renderPatientView = () => (
     <>
@@ -392,6 +464,57 @@ function App() {
           </List>
         </Paper>
       )}
+
+      <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h6" gutterBottom color="primary">
+          Telemedicine Services
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Virtual Consultation
+                </Typography>
+                <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                  Connect with healthcare professionals from the comfort of your home
+                </Typography>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  startIcon={<VideocamIcon />}
+                  onClick={() => setShowTelemedDialog(true)}
+                >
+                  Schedule Appointment
+                </Button>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom>
+                  Previous Consultations
+                </Typography>
+                <List dense>
+                  <ListItem>
+                    <ListItemText
+                      primary="Dr. Sarah Smith"
+                      secondary="March 15, 2024 - Follow up available"
+                    />
+                  </ListItem>
+                </List>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
+      </Paper>
+
+      <TelemedDialog 
+        open={showTelemedDialog}
+        onClose={() => setShowTelemedDialog(false)}
+        doctor={selectedDoctor}
+      />
     </>
   );
 
@@ -399,7 +522,7 @@ function App() {
     <>
       <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
         <Typography variant="h5" gutterBottom sx={{ color: 'primary.main' }}>
-          Patient Records
+          Patient Records & Check-up Schedule
         </Typography>
         <TableContainer>
           <Table>
@@ -409,38 +532,141 @@ function App() {
                 <TableCell sx={{ fontWeight: 'bold', color: 'white' }}>Name</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: 'white' }}>Age</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: 'white' }}>Last Visit</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', color: 'white' }}>Next Check-up</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', color: 'white' }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
-              {patientRecords.map((patient) => (
-                <TableRow 
-                  key={patient.id}
-                  sx={{ '&:hover': { backgroundColor: 'action.hover' } }}
-                >
-                  <TableCell>{patient.id}</TableCell>
-                  <TableCell>{patient.name}</TableCell>
-                  <TableCell>{patient.age}</TableCell>
-                  <TableCell>{patient.lastVisit}</TableCell>
-                  <TableCell>
-                    <Button
-                      startIcon={<FolderIcon />}
-                      onClick={() => handlePatientSelect(patient)}
-                      variant="contained"
-                      size="small"
-                      sx={{ 
-                        backgroundColor: 'secondary.main',
-                        '&:hover': { backgroundColor: 'secondary.dark' }
-                      }}
-                    >
-                      View Record
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
+              {patientRecords.map((patient) => {
+                const reminder = checkupReminders.find(r => r.patientId === patient.id);
+                const dueDate = reminder ? new Date(reminder.dueDate) : null;
+                const today = new Date();
+                const daysUntilCheckup = dueDate ? Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24)) : null;
+                
+                return (
+                  <TableRow 
+                    key={patient.id}
+                    sx={{ 
+                      '&:hover': { backgroundColor: 'action.hover' },
+                      backgroundColor: daysUntilCheckup && daysUntilCheckup <= 7 ? 'rgba(255, 193, 7, 0.1)' : 'inherit'
+                    }}
+                  >
+                    <TableCell>{patient.id}</TableCell>
+                    <TableCell>{patient.name}</TableCell>
+                    <TableCell>{patient.age}</TableCell>
+                    <TableCell>{patient.lastVisit}</TableCell>
+                    <TableCell>
+                      {reminder && (
+                        <Chip 
+                          label={`${reminder.type}: ${reminder.dueDate}`}
+                          color={daysUntilCheckup <= 7 ? 'warning' : 'default'}
+                          size="small"
+                          icon={<ScheduleIcon />}
+                          sx={{ 
+                            '& .MuiChip-label': { 
+                              fontWeight: daysUntilCheckup <= 7 ? 'bold' : 'normal' 
+                            }
+                          }}
+                        />
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Button
+                          startIcon={<FolderIcon />}
+                          onClick={() => handlePatientSelect(patient)}
+                          variant="contained"
+                          size="small"
+                          sx={{ 
+                            backgroundColor: 'secondary.main',
+                            '&:hover': { backgroundColor: 'secondary.dark' }
+                          }}
+                        >
+                          View Record
+                        </Button>
+                        <Button
+                          startIcon={<NotificationsIcon />}
+                          variant="outlined"
+                          size="small"
+                          onClick={() => handleSendCheckupReminder(patient)}
+                          color="primary"
+                        >
+                          Send Reminder
+                        </Button>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </TableContainer>
+      </Paper>
+
+      <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+        <Typography variant="h6" gutterBottom color="primary">
+          Upcoming Check-ups
+        </Typography>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom color="warning.main">
+                  Due This Week
+                </Typography>
+                <List dense>
+                  {checkupReminders
+                    .filter(reminder => {
+                      const daysUntil = Math.ceil((new Date(reminder.dueDate) - new Date()) / (1000 * 60 * 60 * 24));
+                      return daysUntil <= 7 && daysUntil > 0;
+                    })
+                    .map((reminder) => {
+                      const patient = patientRecords.find(p => p.id === reminder.patientId);
+                      return (
+                        <ListItem key={reminder.id}>
+                          <ListItemIcon>
+                            <EventAvailableIcon color="warning" />
+                          </ListItemIcon>
+                          <ListItemText
+                            primary={patient?.name}
+                            secondary={`${reminder.type} - ${reminder.dueDate}`}
+                          />
+                          <Button
+                            size="small"
+                            variant="outlined"
+                            color="warning"
+                            onClick={() => handleSendCheckupReminder({ ...patient, reminder })}
+                          >
+                            Remind
+                          </Button>
+                        </ListItem>
+                      );
+                    })}
+                </List>
+              </CardContent>
+            </Card>
+          </Grid>
+          <Grid item xs={12} md={6}>
+            <Card>
+              <CardContent>
+                <Typography variant="h6" gutterBottom color="info.main">
+                  Schedule New Check-up
+                </Typography>
+                <Box sx={{ mt: 2 }}>
+                  <Button
+                    variant="contained"
+                    color="info"
+                    startIcon={<ScheduleIcon />}
+                    onClick={() => handleScheduleNewCheckup()}
+                    fullWidth
+                  >
+                    Schedule Check-up
+                  </Button>
+                </Box>
+              </CardContent>
+            </Card>
+          </Grid>
+        </Grid>
       </Paper>
 
       <Dialog
