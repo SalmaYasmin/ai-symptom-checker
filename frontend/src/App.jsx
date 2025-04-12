@@ -57,6 +57,7 @@ import EventAvailableIcon from '@mui/icons-material/EventAvailable';
 import ScheduleIcon from '@mui/icons-material/Schedule';
 import SendIcon from '@mui/icons-material/Send';
 import config from './config';
+import medoraBanner from './assets/medora-banner.png';
 
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
@@ -284,7 +285,7 @@ function App() {
     
     try {
       console.log('Attempting to analyze symptoms (technical):', symptomsList);
-      const response = await fetch(`${config.API_URL}/api/symptoms/analyze/technical`, {
+      const response = await fetch(`${config.API_URL}/analyze/technical`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -303,12 +304,17 @@ function App() {
       }
 
       const data = await response.json();
-      setDiagnosis(data.diagnosis);
-      setTechnicalDiagnosis(data.technicalAnalysis);
-      setRecommendations(data.recommendations);
+      setDiagnosis(data.diagnosis || '');
+      setTechnicalDiagnosis(data.technicalAnalysis || '');
+      setRecommendations(data.recommendations || []);
       setMedicalReferences(data.references || []);
     } catch (err) {
       setError(err.message || 'An error occurred');
+      // Reset all analysis states on error
+      setDiagnosis('');
+      setTechnicalDiagnosis('');
+      setRecommendations([]);
+      setMedicalReferences([]);
     } finally {
       setLoading(false);
     }
@@ -871,7 +877,7 @@ function App() {
             </Grid>
 
             {/* Analysis Results Section */}
-            {(diagnosis || technicalDiagnosis || recommendations.length > 0 || medicalReferences.length > 0) && (
+            {(diagnosis || technicalDiagnosis || (recommendations && recommendations.length > 0)) && (
               <Grid item xs={12}>
                 <Card elevation={3}>
                   <CardContent>
@@ -879,64 +885,61 @@ function App() {
                       Analysis Results
                     </Typography>
 
-                    <Accordion defaultExpanded>
-                      <AccordionSummary
-                        expandIcon={<ExpandMoreIcon />}
-                        sx={{ backgroundColor: 'primary.light', color: 'white' }}
-                      >
-                        <MedicalInformationIcon sx={{ mr: 2 }} />
-                        <Typography variant="subtitle1">Clinical Assessment</Typography>
-                      </AccordionSummary>
-                      <AccordionDetails>
-                        <Typography paragraph>{diagnosis}</Typography>
-                      </AccordionDetails>
-                    </Accordion>
-
-                    <Accordion>
-                      <AccordionSummary
-                        expandIcon={<ExpandMoreIcon />}
-                        sx={{ backgroundColor: 'secondary.light', color: 'white' }}
-                      >
-                        <ScienceIcon sx={{ mr: 2 }} />
-                        <Typography variant="subtitle1">Technical Analysis</Typography>
-                      </AccordionSummary>
-                      <AccordionDetails>
-                        <Typography
-                          component="pre"
-                          sx={{
-                            whiteSpace: 'pre-wrap',
-                            fontFamily: 'monospace',
-                            backgroundColor: 'grey.50',
-                            p: 2,
-                            borderRadius: 1
-                          }}
+                    {diagnosis && (
+                      <Accordion defaultExpanded>
+                        <AccordionSummary
+                          expandIcon={<ExpandMoreIcon />}
+                          sx={{ backgroundColor: 'primary.light', color: 'white' }}
                         >
-                          {technicalDiagnosis}
-                        </Typography>
-                      </AccordionDetails>
-                    </Accordion>
+                          <MedicalInformationIcon sx={{ mr: 2 }} />
+                          <Typography variant="subtitle1">Clinical Assessment</Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          <Typography paragraph>{diagnosis}</Typography>
+                        </AccordionDetails>
+                      </Accordion>
+                    )}
 
-                    {recommendations.length > 0 && (
+                    {technicalDiagnosis && (
                       <Accordion>
                         <AccordionSummary
                           expandIcon={<ExpandMoreIcon />}
-                          sx={{ backgroundColor: 'success.light', color: 'white' }}
+                          sx={{ backgroundColor: 'secondary.light', color: 'white' }}
+                        >
+                          <ScienceIcon sx={{ mr: 2 }} />
+                          <Typography variant="subtitle1">Technical Analysis</Typography>
+                        </AccordionSummary>
+                        <AccordionDetails>
+                          <Typography
+                            component="pre"
+                            sx={{
+                              whiteSpace: 'pre-wrap',
+                              fontFamily: 'monospace',
+                              backgroundColor: 'grey.50',
+                              p: 2,
+                              borderRadius: 1
+                            }}
+                          >
+                            {technicalDiagnosis}
+                          </Typography>
+                        </AccordionDetails>
+                      </Accordion>
+                    )}
+
+                    {recommendations && recommendations.length > 0 && (
+                      <Accordion>
+                        <AccordionSummary
+                          expandIcon={<ExpandMoreIcon />}
+                          sx={{ backgroundColor: 'info.light', color: 'white' }}
                         >
                           <RecommendIcon sx={{ mr: 2 }} />
-                          <Typography variant="subtitle1">Recommended Actions</Typography>
+                          <Typography variant="subtitle1">Recommendations</Typography>
                         </AccordionSummary>
                         <AccordionDetails>
                           <List>
                             {recommendations.map((recommendation, index) => (
                               <ListItem key={index}>
-                                <ListItemText 
-                                  primary={recommendation}
-                                  sx={{
-                                    '& .MuiListItemText-primary': {
-                                      fontWeight: index === 0 ? 'bold' : 'normal'
-                                    }
-                                  }}
-                                />
+                                <ListItemText primary={recommendation} />
                               </ListItem>
                             ))}
                           </List>
@@ -944,32 +947,26 @@ function App() {
                       </Accordion>
                     )}
 
-                    {medicalReferences.length > 0 && (
+                    {medicalReferences && medicalReferences.length > 0 && (
                       <Accordion>
                         <AccordionSummary
                           expandIcon={<ExpandMoreIcon />}
-                          sx={{ backgroundColor: 'info.light', color: 'white' }}
+                          sx={{ backgroundColor: 'warning.light', color: 'white' }}
                         >
                           <MenuBookIcon sx={{ mr: 2 }} />
                           <Typography variant="subtitle1">Medical References</Typography>
                         </AccordionSummary>
                         <AccordionDetails>
                           <List>
-                            {medicalReferences.map((ref, index) => (
+                            {medicalReferences.map((reference, index) => (
                               <ListItem key={index}>
-                                <ListItemText
-                                  primary={
-                                    <Link
-                                      href={ref.url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-                                    >
-                                      {ref.title}
-                                      <LaunchIcon fontSize="small" />
+                                <ListItemText 
+                                  primary={reference.title}
+                                  secondary={
+                                    <Link href={reference.url} target="_blank" rel="noopener noreferrer">
+                                      View Source
                                     </Link>
                                   }
-                                  secondary={`${ref.authors.join(', ')} (${ref.year})`}
                                 />
                               </ListItem>
                             ))}
@@ -1054,6 +1051,30 @@ function App() {
 
   return (
     <ErrorBoundary>
+      <Box 
+        sx={{ 
+          width: '100%', 
+          height: '300px', // Fixed height for the banner
+          backgroundColor: '#1e2a35', // Dark blue background
+          position: 'relative',
+          mb: 3,
+          overflow: 'hidden' // Prevent image overflow
+        }}
+      >
+        <Box 
+          component="img"
+          src={medoraBanner}
+          alt="Medora"
+          sx={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover', // Cover the entire space
+            objectPosition: 'center', // Center the image
+            display: 'block', // Remove any extra spacing
+          }}
+        />
+      </Box>
+
       <Container maxWidth="md">
         <Box sx={{ width: '100%' }}>
           <AppBar position="static" color="default" sx={{ mb: 3 }}>
