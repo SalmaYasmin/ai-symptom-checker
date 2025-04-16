@@ -29,10 +29,11 @@ router.get('/', (req, res) => {
 router.get('/test-api', async (req, res) => {
   try {
     const result = await hf.textGeneration({
-      model: 'mistralai/Mistral-7B-Instruct-v0.2',
-      inputs: 'Hello, this is a test message.',
+      model: 'microsoft/BioGPT',
+      inputs: 'What are common symptoms of the flu?',
       parameters: {
-        max_new_tokens: 50
+        max_new_tokens: 100,
+        temperature: 0.7
       }
     });
     res.json({ success: true, message: "API key is working", response: result.generated_text });
@@ -52,61 +53,63 @@ router.post('/analyze', async (req, res) => {
     const { symptoms } = req.body;
     const symptomsText = symptoms.join(', ');
 
-    const prompt = `You are a medical AI assistant. Analyze these symptoms: ${symptomsText}.
+    const prompt = `As a medical AI assistant, analyze these symptoms: ${symptomsText}.
     
-    Provide a clear and concise response with:
-    1. A possible diagnosis (be specific but mention that this is not a substitute for professional medical advice)
-    2. A list of 5 specific recommendations
+    Provide a structured clinical analysis with:
+    1. Possible diagnoses based on current medical literature
+    2. Evidence-based recommendations
+    3. Severity assessment
+    4. When to seek immediate medical attention
     
-    IMPORTANT: Do not use any placeholders like [specific condition] or [Specific recommendation X]. 
-    Provide actual medical analysis and real recommendations based on the symptoms provided.
+    Format the response as:
     
-    Format your response exactly like this:
-    Possible Diagnosis:
-    Based on the symptoms provided, it appears to be [ACTUAL CONDITION]. However, this is not a substitute for professional medical advice.
-
-    Recommendations:
-    [ACTUAL RECOMMENDATION 1]
-    [ACTUAL RECOMMENDATION 2]
-    [ACTUAL RECOMMENDATION 3]
-    [ACTUAL RECOMMENDATION 4]
-    [ACTUAL RECOMMENDATION 5]`;
+    DIAGNOSIS:
+    [Clinical assessment based on symptoms]
+    
+    RECOMMENDATIONS:
+    1. [Evidence-based recommendation]
+    2. [Evidence-based recommendation]
+    3. [Evidence-based recommendation]
+    4. [Evidence-based recommendation]
+    5. [Evidence-based recommendation]
+    
+    SEVERITY:
+    [Assessment of condition severity]
+    
+    URGENT CARE NEEDED IF:
+    [Specific conditions that require immediate medical attention]`;
 
     const result = await hf.textGeneration({
-      model: 'mistralai/Mistral-7B-Instruct-v0.2',
+      model: 'microsoft/BioGPT',
       inputs: prompt,
       parameters: {
         max_new_tokens: 500,
         temperature: 0.7,
-        top_p: 0.9
+        top_p: 0.9,
+        do_sample: true
       }
     });
 
-    // Process the text response to extract diagnosis and recommendations
+    // Process the text response
     const responseText = result.generated_text;
     
-    // Find the last occurrence of "Possible Diagnosis:" and "Recommendations:"
-    const lastDiagnosisIndex = responseText.lastIndexOf('Possible Diagnosis:');
-    const lastRecommendationsIndex = responseText.lastIndexOf('Recommendations:');
-    
-    // Extract the final diagnosis and recommendations sections
-    const diagnosisSection = lastDiagnosisIndex !== -1 ? 
-      responseText.slice(lastDiagnosisIndex + 'Possible Diagnosis:'.length, lastRecommendationsIndex).trim() :
-      'Unable to determine diagnosis';
-    
-    const recommendationsSection = lastRecommendationsIndex !== -1 ?
-      responseText.slice(lastRecommendationsIndex + 'Recommendations:'.length).trim() :
-      '';
-    
-    // Split recommendations into an array and clean up
-    const recommendations = recommendationsSection
+    // Extract sections using regex
+    const diagnosis = responseText.match(/DIAGNOSIS:\s*([\s\S]*?)(?=RECOMMENDATIONS:|$)/)?.[1]?.trim() || 'Unable to determine diagnosis';
+    const recommendations = (responseText.match(/RECOMMENDATIONS:\s*([\s\S]*?)(?=SEVERITY:|$)/)?.[1] || '')
       .split('\n')
       .map(line => line.trim())
-      .filter(line => line.length > 0 && !line.includes('[ACTUAL') && !line.startsWith('Possible Diagnosis:'));
+      .filter(line => line.length > 0 && line.match(/^\d+\./))
+      .map(line => line.replace(/^\d+\.\s*/, ''));
+    
+    const severity = responseText.match(/SEVERITY:\s*([\s\S]*?)(?=URGENT CARE NEEDED IF:|$)/)?.[1]?.trim() || 'Unable to assess severity';
+    const urgentCare = responseText.match(/URGENT CARE NEEDED IF:\s*([\s\S]*?)$/)?.[1]?.trim() || 'Seek medical attention if symptoms worsen';
 
     res.json({
-      diagnosis: diagnosisSection,
-      recommendations: recommendations.length > 0 ? recommendations : ['No specific recommendations available']
+      diagnosis,
+      recommendations: recommendations.length > 0 ? recommendations : ['No specific recommendations available'],
+      severity,
+      urgentCare,
+      disclaimer: "This is an AI-generated analysis and should not replace professional medical advice. Always consult with a healthcare provider for proper diagnosis and treatment."
     });
   } catch (error) {
     console.error('Error:', error);
