@@ -1,250 +1,456 @@
 import express from 'express';
-import { HfInference } from '@huggingface/inference';
+import { OpenAI } from 'openai';
 import dotenv from 'dotenv';
+import { fileURLToPath } from 'url';
+import { dirname } from 'path';
+import { Request, Response } from 'express';
+import multer from 'multer';
+import path from 'path';
+import pkg from 'pdfjs-dist/legacy/build/pdf.js';
+const { getDocument, GlobalWorkerOptions } = pkg;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 dotenv.config();
 
 const router = express.Router();
-const hf = new HfInference(process.env.HUGGINGFACE_API_KEY);
 
-// Root endpoint to list available endpoints
-router.get('/', (req, res) => {
-  res.json({
-    availableEndpoints: {
-      testApi: {
-        method: 'GET',
-        path: '/api/symptoms/test-api',
-        description: 'Test Hugging Face API connection'
-      },
-      analyze: {
-        method: 'POST',
-        path: '/api/symptoms/analyze',
-        description: 'Analyze symptoms and get medical advice'
-      }
-    }
-  });
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
-// Test endpoint to verify Hugging Face API key
-router.get('/test-api', async (req, res) => {
+// Add debug log
+console.log('OpenAI API Key length:', process.env.OPENAI_API_KEY?.length || 0);
+
+// Initialize PDF.js worker
+GlobalWorkerOptions.workerSrc = path.resolve(__dirname, '../../node_modules/pdfjs-dist/legacy/build/pdf.worker.js');
+
+// Root endpoint
+router.get('/', (req, res) => {
+  res.json({ message: 'Symptoms API is running' });
+});
+
+const upload = multer({
+  storage: multer.memoryStorage(), // in-memory; change if saving to disk
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['.png', '.jpg', '.jpeg', '.pdf'];
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (allowedTypes.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only PNG, JPG, JPEG, and PDF files are allowed'));
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
+
+// Test endpoint
+router.get('/test', async (req: Request, res: Response) => {
   try {
-    const result = await hf.textGeneration({
-      model: 'mistralai/Mistral-7B-Instruct-v0.2',
-      inputs: 'Hello, this is a test message.',
-      parameters: {
-        max_new_tokens: 50
-      }
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        { role: "system", content: "You are a helpful assistant." },
+        { role: "user", content: "Hello, are you working?" }
+      ],
+      temperature: 0.7,
+      max_tokens: 50
     });
-    res.json({ success: true, message: "API key is working", response: result.generated_text });
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-    console.error('Hugging Face API Error:', error);
+    res.json({ message: "Successfully connected to OpenAI API" });
+  } catch (error: any) {
+    console.error('OpenAI API Error:', error);
     res.status(500).json({ 
-      success: false, 
-      error: 'API key verification failed', 
-      details: errorMessage 
+      error: "Failed to connect to OpenAI API",
+      details: error.message,
+      code: error.code
     });
   }
 });
 
+// Analyze symptoms endpoint
 router.post('/analyze', async (req, res) => {
   try {
     const { symptoms } = req.body;
+    
+    if (!symptoms || !Array.isArray(symptoms)) {
+      return res.status(400).json({ error: 'Symptoms must be provided as an array' });
+    }
+
     const symptomsText = symptoms.join(', ');
-
-    const prompt = `You are a medical AI assistant. Analyze these symptoms: ${symptomsText}.
     
-    Provide a clear and concise response with:
-    1. A possible diagnosis (be specific but mention that this is not a substitute for professional medical advice)
-    2. A list of 5 specific recommendations
-    
-    IMPORTANT: Do not use any placeholders like [specific condition] or [Specific recommendation X]. 
-    Provide actual medical analysis and real recommendations based on the symptoms provided.
-    
-    Format your response exactly like this:
-    Possible Diagnosis:
-    Based on the symptoms provided, it appears to be [ACTUAL CONDITION]. However, this is not a substitute for professional medical advice.
-
-    Recommendations:
-    [ACTUAL RECOMMENDATION 1]
-    [ACTUAL RECOMMENDATION 2]
-    [ACTUAL RECOMMENDATION 3]
-    [ACTUAL RECOMMENDATION 4]
-    [ACTUAL RECOMMENDATION 5]`;
-
-    const result = await hf.textGeneration({
-      model: 'mistralai/Mistral-7B-Instruct-v0.2',
-      inputs: prompt,
-      parameters: {
-        max_new_tokens: 500,
-        temperature: 0.7,
-        top_p: 0.9
-      }
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        { 
+          role: "system", 
+          content: "You are a medical AI assistant. Analyze the symptoms and provide a structured response with possible conditions, severity assessment, and recommendations. Format your response in a clear, professional manner."
+        },
+        { 
+          role: "user", 
+          content: `Please analyze these symptoms: ${symptomsText}. Provide a detailed medical analysis including possible conditions, severity assessment, and recommendations.`
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 500
     });
 
-    // Process the text response to extract diagnosis and recommendations
-    const responseText = result.generated_text;
-    
-    // Find the last occurrence of "Possible Diagnosis:" and "Recommendations:"
-    const lastDiagnosisIndex = responseText.lastIndexOf('Possible Diagnosis:');
-    const lastRecommendationsIndex = responseText.lastIndexOf('Recommendations:');
-    
-    // Extract the final diagnosis and recommendations sections
-    const diagnosisSection = lastDiagnosisIndex !== -1 ? 
-      responseText.slice(lastDiagnosisIndex + 'Possible Diagnosis:'.length, lastRecommendationsIndex).trim() :
-      'Unable to determine diagnosis';
-    
-    const recommendationsSection = lastRecommendationsIndex !== -1 ?
-      responseText.slice(lastRecommendationsIndex + 'Recommendations:'.length).trim() :
-      '';
-    
-    // Split recommendations into an array and clean up
-    const recommendations = recommendationsSection
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0 && !line.includes('[ACTUAL') && !line.startsWith('Possible Diagnosis:'));
+    const response = completion.choices[0].message.content || 'No response generated';
 
+    // Parse the response into sections
+    const sections = response.split(/\d+\.\s+(?=Clinical Assessment|Differential Diagnosis|Recommended Diagnostic|Treatment Considerations|Medical Literature)/g)
+      .filter(section => section.trim());
+
+    // Extract the differential diagnosis section
+    const differentialDiagnosisSection = sections.find(section => 
+      section.includes('Differential Diagnosis')
+    ) || '';
+
+    // More robust parsing for differential diagnoses
+    let diagnoses: string[] = [];
+    
+    // First try to find diagnoses by ICD-10 codes
+    const icd10Matches = differentialDiagnosisSection.match(/\d+\.\s+.*?\(ICD-10:.*?\)/g) || [];
+    
+    if (icd10Matches.length > 0) {
+      // If we found diagnoses with ICD-10 codes, use them as anchors
+      icd10Matches.forEach((match, index) => {
+        const startIndex = differentialDiagnosisSection.indexOf(match);
+        const nextMatch = icd10Matches[index + 1];
+        const endIndex = nextMatch ? differentialDiagnosisSection.indexOf(nextMatch) : differentialDiagnosisSection.length;
+        
+        // Extract the diagnosis and its details
+        const diagnosisText = differentialDiagnosisSection.substring(startIndex, endIndex).trim();
+        diagnoses.push(diagnosisText);
+      });
+    } else {
+      // Fallback: try to find numbered diagnoses
+      const numberedMatches = differentialDiagnosisSection.match(/\d+\.\s+.*?(?=\d+\.|$)/gs) || [];
+      diagnoses = numberedMatches.map(match => match.trim()).filter(match => match);
+    }
+    
+    // If still no diagnoses found, try a more aggressive approach
+    if (diagnoses.length === 0) {
+      // Split by newlines and look for lines that might be diagnoses
+      const lines = differentialDiagnosisSection.split('\n').filter(line => line.trim());
+      
+      let currentDiagnosis = '';
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        
+        // Skip the section header
+        if (trimmedLine.includes('Differential Diagnosis')) continue;
+        
+        // If line starts with a number, it's likely a new diagnosis
+        if (/^\d+\./.test(trimmedLine)) {
+          if (currentDiagnosis) {
+            diagnoses.push(currentDiagnosis.trim());
+          }
+          currentDiagnosis = trimmedLine;
+        } else if (currentDiagnosis) {
+          // Append to current diagnosis
+          currentDiagnosis += '\n' + trimmedLine;
+        }
+      }
+      
+      // Add the last diagnosis if there is one
+      if (currentDiagnosis) {
+        diagnoses.push(currentDiagnosis.trim());
+      }
+    }
+
+    // Extract other sections
+    const clinicalAssessment = sections.find(s => 
+      s.includes('Clinical Assessment')
+    ) || '';
+    
+    const diagnosticApproach = sections.find(s => 
+      s.includes('Recommended Diagnostic')
+    ) || '';
+    
+    const treatmentConsiderations = sections.find(s => 
+      s.includes('Treatment Considerations')
+    ) || '';
+    
+    const references = sections.find(s => 
+      s.includes('Medical Literature References')
+    ) || '';
+
+    // Return the structured response
     res.json({
-      diagnosis: diagnosisSection,
-      recommendations: recommendations.length > 0 ? recommendations : ['No specific recommendations available']
+      analysis: response,
+      structured: {
+        clinicalAssessment: clinicalAssessment.split('\n').filter(line => line.trim()),
+        differentialDiagnosis: diagnoses,
+        diagnosticApproach: diagnosticApproach.split('\n').filter(line => line.trim()),
+        treatmentConsiderations: treatmentConsiderations.split('\n').filter(line => line.trim()),
+        references: references.split('\n').filter(line => line.trim())
+      }
     });
   } catch (error) {
-    console.error('Error:', error);
-    res.status(500).json({ 
-      error: 'An error occurred while analyzing symptoms',
-      details: error instanceof Error ? error.message : 'Unknown error'
-    });
+    console.error('Error analyzing symptoms:', error);
+    res.status(500).json({ error: 'Failed to analyze symptoms' });
   }
 });
 
-router.post('/analyze/technical', async (req, res) => {
+// Technical analysis endpoint
+router.post('/analyze/technical', upload.array('files', 5), async (req: Request, res: Response) => {
   try {
-    const { symptoms, patientId } = req.body;
-    const symptomsText = symptoms.join(', ');
+    const { symptoms } = req.body;
+    const files = req.files as Express.Multer.File[];
 
-    const prompt = `You are a medical professional providing a detailed clinical analysis. Based on the reported symptoms: ${symptomsText}, provide a comprehensive medical assessment.
+    const hasSymptoms = symptoms && Array.isArray(symptoms) && symptoms.length > 0;
+    const hasFiles = files && files.length > 0;
 
-Clinical Analysis Structure:
+    if (!hasSymptoms && !hasFiles) {
+      return res.status(400).json({ error: 'Please provide either symptoms or diagnostic files (X-ray, PDF, etc.)' });
+    }
 
-1. Clinical Assessment:
-- Detailed analysis of presenting symptoms
-- Potential underlying pathophysiology
-- Relevant clinical patterns and associations
-- Severity assessment criteria
+    const symptomsText = hasSymptoms ? symptoms.join(', ') : '';
 
-2. Differential Diagnosis (in order of likelihood):
-- List top 3-5 potential diagnoses with ICD-10 codes
-- Key distinguishing features for each
-- Supporting and contradicting factors
-- Critical diagnostic considerations
+    let fileAnalysis = '';
+    if (hasFiles) {
+      // Process each file
+      const fileAnalyses = await Promise.all(files.map(async (file) => {
+        const fileType = path.extname(file.originalname).toLowerCase();
+        
+        if (['.png', '.jpg', '.jpeg'].includes(fileType)) {
+          // For images, use GPT-4o to analyze the content
+          const base64Image = file.buffer.toString('base64');
+          const visionResponse = await openai.chat.completions.create({
+            model: "gpt-4o",
+            messages: [
+              {
+                role: "system",
+                content: "You are a medical imaging specialist. Analyze the medical image and provide detailed observations about any abnormalities, anatomical structures, and potential medical conditions visible in the image. Focus on objective findings and avoid making definitive diagnoses without clinical correlation."
+              },
+              {
+                role: "user",
+                content: [
+                  {
+                    type: "text",
+                    text: "Please analyze this medical image and describe what you observe, including any abnormalities or notable findings."
+                  },
+                  {
+                    type: "image_url",
+                    image_url: {
+                      url: `data:image/${fileType.slice(1)};base64,${base64Image}`
+                    }
+                  }
+                ]
+              }
+            ],
+            max_tokens: 500
+          });
 
-3. Recommended Diagnostic Approach:
-- Initial laboratory studies (specific tests with clinical rationale)
-- Imaging studies (modalities and specific views/protocols)
-- Additional diagnostic considerations
-- Priority/urgency level for each test
+          return `Image Analysis (${file.originalname}):\n${visionResponse.choices[0].message.content}`;
+        } else if (fileType === '.pdf') {
+          try {
+            // Load the PDF document
+            const pdfData = new Uint8Array(file.buffer);
+            const loadingTask = getDocument({ data: pdfData });
+            const pdf = await loadingTask.promise;
+            
+            // Extract text from all pages
+            let pdfText = '';
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items
+                .map((item: any) => item.str)
+                .join(' ');
+              pdfText += pageText + '\n';
+            }
 
-4. Treatment Considerations:
-- First-line therapeutic options
-- Evidence-based treatment protocols
-- Specific medication recommendations (including dosing)
-- Monitoring parameters
-- Potential complications to watch for
+            if (!pdfText || pdfText.trim().length === 0) {
+              throw new Error('No text content found in PDF');
+            }
 
-5. Medical Literature References:
-- Current clinical guidelines
-- Relevant research papers
-- Evidence level for recommendations
+            // Analyze PDF content using GPT-4o
+            const pdfAnalysis = await openai.chat.completions.create({
+              model: "gpt-4o",
+              messages: [
+                {
+                  role: "system",
+                  content: "You are a medical report analyst. Analyze the medical report and provide a detailed interpretation of the findings, focusing on abnormal values, trends, and their clinical significance. Format your response in a clear, structured manner."
+                },
+                {
+                  role: "user",
+                  content: `Please analyze this medical report and provide a detailed interpretation:\n\n${pdfText}`
+                }
+              ],
+              max_tokens: 1000
+            });
 
-Use precise medical terminology and include specific values, ranges, and criteria where applicable.`;
+            return `PDF Report Analysis (${file.originalname}):\n${pdfAnalysis.choices[0].message.content}`;
+          } catch (error: any) {
+            console.error('Error analyzing PDF:', error);
+            return `PDF Report (${file.originalname}): Error analyzing PDF file - ${error.message}`;
+          }
+        }
+      }));
 
-    const result = await hf.textGeneration({
-      model: 'mistralai/Mistral-7B-Instruct-v0.2',
-      inputs: prompt,
-      parameters: {
-        max_new_tokens: 800,
-        temperature: 0.7,
-        top_p: 0.9
+      fileAnalysis = '\n\nMedical Image/Report Analysis:\n' + fileAnalyses.join('\n\n');
+    }
+
+    const userPrompt = hasSymptoms
+      ? `Please provide a comprehensive technical analysis of these symptoms: ${symptomsText}.${fileAnalysis} Include all sections as specified in the system message.`
+      : `Please analyze the following medical images/reports and provide a comprehensive technical report:${fileAnalysis} Include all sections as specified in the system message.`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo",
+      messages: [
+        { 
+          role: "system", 
+          content: `You are a medical AI assistant specializing in technical analysis. Provide a detailed technical analysis following this exact structure:
+
+1. Clinical Assessment
+   ${hasSymptoms ? '- Presenting Symptoms: Detailed analysis of each symptom' : '- Image/Report Findings: Detailed analysis of the uploaded medical images or reports'}
+   - Underlying Pathophysiology: Mechanism of the condition
+   - Clinical Patterns & Associations: How findings relate to each other
+   - Severity Assessment Criteria: Mild, Moderate, Severe criteria
+
+2. Differential Diagnosis (give me top5 diagnosesin order of likelihood)
+  Number each diagnosis (e.g., 1., 2., 3.) and start with the condition name followed by the ICD-10 code in parentheses. For example: 1. Pulmonary Embolism (ICD-10: I26.9)
+  For each condition include:
+   - ICD-10 code
+   - Distinguishing Features
+   - Supporting Factors
+   - Contradicting Factors
+   - Critical Considerations
+
+3. Recommended Diagnostic Approach
+   - Initial Laboratory Studies (with rationale)
+   - Imaging Studies (with protocol and rationale)
+   - Additional Diagnostic Considerations
+   - Urgency Level
+
+4. Treatment Considerations
+   - First-line Therapeutic Options
+   - Specific treatment protocols
+   - Monitoring requirements
+
+5. Medical Literature References
+   - Include latest guidelines
+   - Evidence levels
+   - Key references
+
+Format the response in clear sections with proper medical terminology and evidence-based recommendations. Do not use markdown formatting.`
+        },
+        { 
+          role: "user", 
+          content: userPrompt
+        }
+      ],
+      temperature: 0.7,
+      max_tokens: 2000
+    });
+
+    // Log the complete raw response from the model
+    console.log('Raw GPT-3.5-turbo Response:', JSON.stringify(completion, null, 2));
+
+    const response = completion.choices[0].message.content || 'No response generated';
+
+    // Parse the response into sections
+    const sections = response.split(/\d+\.\s+(?=Clinical Assessment|Differential Diagnosis|Recommended Diagnostic|Treatment Considerations|Medical Literature)/g)
+      .filter(section => section.trim());
+
+    // Extract the differential diagnosis section
+    const differentialDiagnosisSection = sections.find(section => 
+      section.includes('Differential Diagnosis')
+    ) || '';
+
+    // More robust parsing for differential diagnoses
+    let diagnoses: string[] = [];
+    
+    // First try to find diagnoses by ICD-10 codes
+    const icd10Matches = differentialDiagnosisSection.match(/\d+\.\s+.*?\(ICD-10:.*?\)/g) || [];
+    
+    if (icd10Matches.length > 0) {
+      // If we found diagnoses with ICD-10 codes, use them as anchors
+      icd10Matches.forEach((match, index) => {
+        const startIndex = differentialDiagnosisSection.indexOf(match);
+        const nextMatch = icd10Matches[index + 1];
+        const endIndex = nextMatch ? differentialDiagnosisSection.indexOf(nextMatch) : differentialDiagnosisSection.length;
+        
+        // Extract the diagnosis and its details
+        const diagnosisText = differentialDiagnosisSection.substring(startIndex, endIndex).trim();
+        diagnoses.push(diagnosisText);
+      });
+    } else {
+      // Fallback: try to find numbered diagnoses
+      const numberedMatches = differentialDiagnosisSection.match(/\d+\.\s+.*?(?=\d+\.|$)/gs) || [];
+      diagnoses = numberedMatches.map(match => match.trim()).filter(match => match);
+    }
+    
+    // If still no diagnoses found, try a more aggressive approach
+    if (diagnoses.length === 0) {
+      // Split by newlines and look for lines that might be diagnoses
+      const lines = differentialDiagnosisSection.split('\n').filter(line => line.trim());
+      
+      let currentDiagnosis = '';
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        
+        // Skip the section header
+        if (trimmedLine.includes('Differential Diagnosis')) continue;
+        
+        // If line starts with a number, it's likely a new diagnosis
+        if (/^\d+\./.test(trimmedLine)) {
+          if (currentDiagnosis) {
+            diagnoses.push(currentDiagnosis.trim());
+          }
+          currentDiagnosis = trimmedLine;
+        } else if (currentDiagnosis) {
+          // Append to current diagnosis
+          currentDiagnosis += '\n' + trimmedLine;
+        }
+      }
+      
+      // Add the last diagnosis if there is one
+      if (currentDiagnosis) {
+        diagnoses.push(currentDiagnosis.trim());
+      }
+    }
+
+    // Extract other sections
+    const clinicalAssessment = sections.find(s => 
+      s.includes('Clinical Assessment')
+    ) || '';
+    
+    const diagnosticApproach = sections.find(s => 
+      s.includes('Recommended Diagnostic')
+    ) || '';
+    
+    const treatmentConsiderations = sections.find(s => 
+      s.includes('Treatment Considerations')
+    ) || '';
+    
+    const references = sections.find(s => 
+      s.includes('Medical Literature References')
+    ) || '';
+
+    // Return the structured response
+    res.json({
+      analysis: response,
+      structured: {
+        clinicalAssessment: clinicalAssessment.split('\n').filter(line => line.trim()),
+        differentialDiagnosis: diagnoses,
+        diagnosticApproach: diagnosticApproach.split('\n').filter(line => line.trim()),
+        treatmentConsiderations: treatmentConsiderations.split('\n').filter(line => line.trim()),
+        references: references.split('\n').filter(line => line.trim())
       }
     });
-
-    const responseText = result.generated_text;
-
-    // Extract sections using regex
-    const clinicalAssessment = extractSection(responseText, "Clinical Assessment:", "Differential Diagnosis:");
-    const differentialDiagnosis = extractSection(responseText, "Differential Diagnosis:", "Recommended Diagnostic Approach:");
-    const diagnosticApproach = extractSection(responseText, "Recommended Diagnostic Approach:", "Treatment Considerations:");
-    const treatmentConsiderations = extractSection(responseText, "Treatment Considerations:", "Medical Literature References:");
-    const references = extractSection(responseText, "Medical Literature References:", null);
-
-    // Format recommendations as an array
-    const recommendations = treatmentConsiderations
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0 && line.match(/^[A-Za-z]/));
-
-    res.json({
-      diagnosis: clinicalAssessment,
-      technicalAnalysis: `
-Differential Diagnosis:
-${differentialDiagnosis}
-
-Diagnostic Approach:
-${diagnosticApproach}`,
-      recommendations: recommendations,
-      references: parseReferences(references)
+  } catch (error: any) {
+    console.error('Error analyzing symptoms:', error);
+    res.status(500).json({ 
+      error: 'Failed to analyze symptoms',
+      details: error.message
     });
-
-  } catch (error: unknown) {
-    if (error instanceof Error) {
-      res.status(500).json({ message: error.message });
-    } else {
-      res.status(500).json({ message: 'An unknown error occurred' });
-    }
   }
 });
-
-// Helper function to extract sections from the response
-function extractSection(text: string, startMarker: string, endMarker: string | null): string {
-  const startIndex = text.indexOf(startMarker);
-  if (startIndex === -1) return '';
-  
-  const start = startIndex + startMarker.length;
-  const end = endMarker ? text.indexOf(endMarker, start) : text.length;
-  
-  return text.slice(start, end !== -1 ? end : undefined).trim();
-}
-
-// Helper function to parse references into structured format
-function parseReferences(referencesText: string): Array<{
-  title: string;
-  authors: string[];
-  year: number;
-  url: string;
-}> {
-  const references = referencesText
-    .split('\n')
-    .filter(line => line.trim().length > 0)
-    .map(ref => {
-      // Attempt to extract year from the reference text
-      const yearMatch = ref.match(/\b(19|20)\d{2}\b/);
-      const year = yearMatch ? parseInt(yearMatch[0]) : new Date().getFullYear();
-
-      // Extract authors if they appear in a standard format
-      const authorsMatch = ref.match(/([A-Za-z\s,\.]+)(?:\(|\d{4}|et al)/);
-      const authors = authorsMatch 
-        ? [authorsMatch[1].trim()]
-        : ['Author information pending'];
-
-      return {
-        title: ref.trim(),
-        authors,
-        year,
-        url: `https://pubmed.ncbi.nlm.nih.gov/?term=${encodeURIComponent(ref.trim())}`
-      };
-    });
-
-  return references;
-}
 
 export default router;

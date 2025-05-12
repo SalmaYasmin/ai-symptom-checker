@@ -1,7 +1,9 @@
 import express from 'express';
 import cors from 'cors';
-import { connectDB } from './config/database';
-import symptomRoutes from './routes/symptoms';
+import { connectDB } from './config/database.js';
+import symptomsRouter from './routes/symptoms.js';
+import patientRoutes from './routes/patientRoutes.js';
+import doctorRoutes from './routes/doctorRoutes.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -23,7 +25,9 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.json());
+// Increase JSON and URL-encoded body size limits
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Connect to MongoDB
 connectDB();
@@ -38,7 +42,9 @@ app.get('/api/health', (req, res) => {
 });
 
 // Routes
-app.use('/api/symptoms', symptomRoutes);
+app.use('/api/symptoms', symptomsRouter);
+app.use('/api/v1/patients', patientRoutes);
+app.use('/api/v1/doctors', doctorRoutes);
 
 // Add a simple test route
 app.get('/', (req, res) => {
